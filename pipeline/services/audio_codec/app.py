@@ -52,7 +52,13 @@ class AudioCodecModel:
         LOG.info("loading SAMAudio checkpoint to extract DACVAE: %s", model_id)
         # Load to CPU first so we don't peak-allocate the unused submodules
         # on the target GPU.
-        model = SAMAudio.from_pretrained(model_id, map_location="cpu", strict=False)
+        # NOTE: strict=False on SAMAudio is a silent no-op — its overridden
+        # load_state_dict has no else-branch when strict is False, so the
+        # actual `super().load_state_dict(...)` call never runs and you end
+        # up with random weights. The default strict=True path already
+        # filters T5 / ranker / span keys via skip_regex, so it's the safe
+        # one even when we plan to drop those submodules afterwards.
+        model = SAMAudio.from_pretrained(model_id, map_location="cpu")
         codec = model.audio_codec
 
         # Drop everything we don't need before moving to GPU.

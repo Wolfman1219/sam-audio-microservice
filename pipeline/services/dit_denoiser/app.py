@@ -45,9 +45,13 @@ def _load_dit_only(model_id: str, device: torch.device, dtype: torch.dtype):
     """Load SAMAudio, strip non-DiT submodules, cast and move to device."""
     LOG.info("loading SAMAudio for DiT-only inference: %s", model_id)
     # Load whole model on CPU so the unused submodules never touch the GPU.
-    # strict=False because the checkpoint may not include the T5 / ranker
-    # weights that SAMAudio's load_state_dict already tolerates.
-    model = SAMAudio.from_pretrained(model_id, map_location="cpu", strict=False)
+    # NOTE: strict=False on SAMAudio is a silent no-op — its overridden
+    # load_state_dict has no else-branch when strict is False, so the
+    # actual `super().load_state_dict(...)` call never runs and you end
+    # up with random weights. The default strict=True path already
+    # filters T5 / ranker / span keys via skip_regex, so it's the safe
+    # one even when we plan to drop those submodules afterwards.
+    model = SAMAudio.from_pretrained(model_id, map_location="cpu")
 
     # Null out everything we don't need. Order matters slightly — drop
     # references then collect.
