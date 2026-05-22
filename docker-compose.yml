@@ -1,0 +1,189 @@
+# docker-compose for the 2-GPU baseline layout.
+#
+#   GPU 0 -> dit-denoiser  (the bottleneck, dedicated card)
+#   GPU 1 -> text-encoder + audio-codec + judge-ranker + clap-ranker
+#
+# Host port mappings (18001..18005) let you run the orchestrator and the
+# parity test from the host without going through the compose network.
+# Inside the compose network services address each other by name.
+#
+# For the 4-GPU throughput layout, change the device_ids and add a second
+# dit-denoiser replica (see README).
+
+services:
+  base:
+    # Build-only entry that produces the shared base image. Run once with
+    #   docker compose --profile build-only build base
+    # before bringing the stack up.
+    image: sam-audio-base:latest
+    build:
+      context: .
+      dockerfile: docker/base.Dockerfile
+    profiles: ["build-only"]
+    command: ["true"]
+
+  text-encoder:
+    image: sam-audio-text-encoder:latest
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        SERVICE: text_encoder
+    environment:
+      - SAMP_DEVICE=cuda:0
+      - SAMP_DTYPE=bfloat16
+      - SAMP_BATCH_MAX_SIZE=32
+      - SAMP_BATCH_MAX_WAIT_MS=5
+      - SAMP_MODEL_NAME=t5-base
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - hf_cache:/cache/huggingface
+    ports:
+      - "18001:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["1"]
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 60s
+
+  audio-codec:
+    image: sam-audio-audio-codec:latest
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        SERVICE: audio_codec
+    environment:
+      - SAMP_DEVICE=cuda:0
+      - SAMP_DTYPE=float32       # DACVAE wants fp32 (cudnn disabled internally)
+      - SAMP_BATCH_MAX_SIZE=8
+      - SAMP_BATCH_MAX_WAIT_MS=10
+      - SAMP_MODEL_ID=facebook/sam-audio-large
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - hf_cache:/cache/huggingface
+    ports:
+      - "18002:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["1"]
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 120s
+
+  dit-denoiser:
+    image: sam-audio-dit-denoiser:latest
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        SERVICE: dit_denoiser
+    environment:
+      - SAMP_DEVICE=cuda:0
+      - SAMP_DTYPE=bfloat16
+      - SAMP_BATCH_MAX_SIZE=4    # candidates explode the effective batch
+      - SAMP_BATCH_MAX_WAIT_MS=20
+      - SAMP_MODEL_ID=facebook/sam-audio-large
+      - SAMP_ODE_METHOD=midpoint
+      - SAMP_ODE_STEP_SIZE=0.0625
+      - SAMP_TORCH_COMPILE=1
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - hf_cache:/cache/huggingface
+    ports:
+      - "18003:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 60
+      start_period: 240s
+
+  judge-ranker:
+    image: sam-audio-judge-ranker:latest
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        SERVICE: judge_ranker
+    environment:
+      - SAMP_DEVICE=cuda:0
+      - SAMP_DTYPE=bfloat16
+      - SAMP_BATCH_MAX_SIZE=4
+      - SAMP_BATCH_MAX_WAIT_MS=20
+      - SAMP_JUDGE_MODEL_ID=facebook/sam-audio-judge
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - hf_cache:/cache/huggingface
+    ports:
+      - "18004:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["2"]
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 180s
+
+  clap-ranker:
+    image: sam-audio-clap-ranker:latest
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        SERVICE: clap_ranker
+    environment:
+      - SAMP_DEVICE=cuda:0
+      - SAMP_DTYPE=float32         # laion_clap's data prep expects fp32
+      - SAMP_BATCH_MAX_SIZE=8
+      - SAMP_BATCH_MAX_WAIT_MS=15
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - hf_cache:/cache/huggingface
+    ports:
+      - "18005:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["2"]
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 120s
+
+volumes:
+  hf_cache:
+    driver: local
