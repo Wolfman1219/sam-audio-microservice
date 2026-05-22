@@ -127,8 +127,12 @@ async def _process_score_batch(
     descriptions: list[str] = []
     for item in items:
         # Trim padding from the original input, then expand to (n_cand, S_in).
+        # Inputs must match the model's dtype — Judge contains a DACVAE
+        # encoder whose Conv1d weights are cast along with the rest of the
+        # model when we move it to bf16, so feeding fp32 audio in would
+        # raise a dtype mismatch.
         in_size = int(item["input_wav_size"].item())
-        input_wav = item["input_audio"][:in_size].to(model.device, dtype=torch.float32)
+        input_wav = item["input_audio"][:in_size].to(model.device, dtype=model.dtype)
         input_audio_list.append(input_wav.unsqueeze(0).expand(n_cand, -1).contiguous())
 
         # Trim per-candidate extracted waveforms to their declared sizes,
@@ -136,11 +140,11 @@ async def _process_score_batch(
         ex = item["extracted_audio"]               # (n_cand, S_max_padded)
         ex_sizes = item["extracted_wav_sizes"]     # (n_cand,)
         max_S = int(ex_sizes.max().item())
-        ex_trimmed = torch.zeros(n_cand, max_S, dtype=torch.float32)
+        ex_trimmed = torch.zeros(n_cand, max_S, dtype=model.dtype, device=model.device)
         for c in range(n_cand):
             s = int(ex_sizes[c].item())
-            ex_trimmed[c, :s] = ex[c, :s].float()
-        extracted_audio_list.append(ex_trimmed.to(model.device))
+            ex_trimmed[c, :s] = ex[c, :s].to(model.dtype)
+        extracted_audio_list.append(ex_trimmed)
 
         descriptions.append(item["description"])
 
