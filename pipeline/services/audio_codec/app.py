@@ -72,6 +72,14 @@ class AudioCodecModel:
         self.device = device
         self.sample_rate = codec.sample_rate
         self.hop_length = codec.hop_length
+
+        # Sanity-check the trained weights are present. Random init would
+        # produce stats from torch.nn defaults; the trained encoder has
+        # very specific numbers that repeat across restarts.
+        from pipeline.common.hf_compat import log_weight_stats
+        log_weight_stats(codec.encoder, LOG, label="dac.encoder")
+        log_weight_stats(codec.decoder, LOG, label="dac.decoder")
+
         LOG.info(
             "DACVAE on %s, sample_rate=%d, hop_length=%d",
             device, self.sample_rate, self.hop_length,

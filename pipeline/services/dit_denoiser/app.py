@@ -73,6 +73,12 @@ def _load_dit_only(model_id: str, device: torch.device, dtype: torch.dtype):
     # We intentionally keep the alignment helpers (proj, align_masked_video,
     # embed_anchors, memory_proj, timestep_emb) and the transformer.
     model = model.to(device=device, dtype=dtype).eval()
+
+    # Sanity-check that the trained weights actually landed. Identical
+    # numbers across restarts mean the checkpoint loaded deterministically;
+    # drifting numbers mean we're looking at fresh random init.
+    from pipeline.common.hf_compat import log_weight_stats
+    log_weight_stats(model.transformer, LOG, label="dit.transformer")
     return model
 
 
