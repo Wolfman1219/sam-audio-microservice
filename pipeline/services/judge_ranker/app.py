@@ -36,6 +36,10 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+# Patch sam_audio.BaseModel for newer huggingface_hub versions. Must
+# precede any sam_audio import that triggers a model load.
+from pipeline.common import hf_compat  # noqa: F401
+
 import torch
 from fastapi import FastAPI, Request
 
