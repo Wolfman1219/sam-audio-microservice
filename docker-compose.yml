@@ -37,7 +37,7 @@ services:
       - SAMP_MODEL_NAME=t5-base
       - HF_TOKEN=${HF_TOKEN:-}
     volumes:
-      - hf_cache:/cache/huggingface
+      - ./model_cache:/cache
     ports:
       - "18001:8000"
     deploy:
@@ -69,7 +69,7 @@ services:
       - SAMP_MODEL_ID=facebook/sam-audio-large
       - HF_TOKEN=${HF_TOKEN:-}
     volumes:
-      - hf_cache:/cache/huggingface
+      - ./model_cache:/cache
     ports:
       - "18002:8000"
     deploy:
@@ -104,7 +104,7 @@ services:
       - SAMP_TORCH_COMPILE=1
       - HF_TOKEN=${HF_TOKEN:-}
     volumes:
-      - hf_cache:/cache/huggingface
+      - ./model_cache:/cache
     ports:
       - "18003:8000"
     deploy:
@@ -136,7 +136,7 @@ services:
       - SAMP_JUDGE_MODEL_ID=facebook/sam-audio-judge
       - HF_TOKEN=${HF_TOKEN:-}
     volumes:
-      - hf_cache:/cache/huggingface
+      - ./model_cache:/cache
     ports:
       - "18004:8000"
     deploy:
@@ -167,7 +167,7 @@ services:
       - SAMP_BATCH_MAX_WAIT_MS=15
       - HF_TOKEN=${HF_TOKEN:-}
     volumes:
-      - hf_cache:/cache/huggingface
+      - ./model_cache:/cache
     ports:
       - "18005:8000"
     deploy:
@@ -183,7 +183,3 @@ services:
       timeout: 3s
       retries: 30
       start_period: 120s
-
-volumes:
-  hf_cache:
-    driver: local

@@ -37,9 +37,22 @@ RUN python -m pip install  --break-system-packages \
     "httpx==0.27.*" \
     "pydantic==2.9.*" 
 
-# Default HF cache mount point. Override with -v on the host.
+# All model caches live under /cache so a single host bind mount keeps
+# every framework's weights persistent across image rebuilds and
+# container recreates. Compose bind-mounts ./model_cache here.
+#   - HF_*           : transformers / hub / datasets
+#   - TORCH_HOME     : torch.hub (pretrained checkpoints, JIT)
+#   - XDG_CACHE_HOME : generic ~/.cache fallback
+#   - HOME=/cache    : laion_clap and a few others hardcode
+#                      os.path.expanduser("~/.cache/clap"), which honors
+#                      $HOME but not $XDG_CACHE_HOME. Setting HOME makes
+#                      those land under /cache too.
 ENV HF_HOME=/cache/huggingface \
     TRANSFORMERS_CACHE=/cache/huggingface \
-    HF_HUB_CACHE=/cache/huggingface
+    HF_HUB_CACHE=/cache/huggingface \
+    HF_DATASETS_CACHE=/cache/huggingface/datasets \
+    TORCH_HOME=/cache/torch \
+    XDG_CACHE_HOME=/cache \
+    HOME=/cache
 
 WORKDIR /app
