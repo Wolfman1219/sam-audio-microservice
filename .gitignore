@@ -2,3 +2,4 @@ sam_audio_src/
 .env
 *.mp3
 out/
+model_cache/
